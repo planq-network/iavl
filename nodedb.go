@@ -589,12 +589,15 @@ func (ndb *nodeDB) startPruning() {
 			continue
 		}
 
+		ti := time.Now()
+		fmt.Printf("AAA started pruning version %d at %v\n", toVersion, ti)
 		if err := ndb.deleteVersionsTo(toVersion); err != nil {
 			ndb.logger.Error("Error while pruning", "err", err)
+			fmt.Printf("AAA Error while pruning: %v\n", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
+		fmt.Printf("AAA finished pruning version %d in %v\n", toVersion, time.Since(ti).Milliseconds())
 		ndb.mtx.Lock()
 		if ndb.pruneVersion <= toVersion {
 			ndb.pruneVersion = 0
