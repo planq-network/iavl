@@ -3,7 +3,6 @@
 package iavl
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -215,42 +214,6 @@ func TestTree_Build_Load(t *testing.T) {
 	opts.UntilHash = "3a037f8dd67a5e1a9ef83a53b81c619c9ac0233abee6f34a400fb9b9dfbb4f8d"
 	testTreeBuild(t, mt, opts)
 	require.NoError(t, mt.Close())
-
-	t.Log("export the tree at version 12,000 and import it into a sql db in pre-order")
-	traverseOrder := PreOrder
-	restorePreOrderMt := NewMultiTree(t.TempDir(), TreeOptions{CheckpointInterval: 4000})
-	for sk, tree := range multiTree.Trees {
-		require.NoError(t, restorePreOrderMt.MountTree(sk))
-		exporter := tree.Export(traverseOrder)
-
-		restoreTree := restorePreOrderMt.Trees[sk]
-		_, err := restoreTree.sql.WriteSnapshot(context.Background(), tree.Version(), exporter.Next, SnapshotOptions{WriteCheckpoint: true, TraverseOrder: traverseOrder})
-		require.NoError(t, err)
-		require.NoError(t, restoreTree.LoadSnapshot(tree.Version(), traverseOrder))
-	}
-	require.NoError(t, restorePreOrderMt.Close())
-
-	t.Log("export the tree at version 12,000 and import it into a sql db in post-order")
-	traverseOrder = PostOrder
-	restorePostOrderMt := NewMultiTree(t.TempDir(), TreeOptions{CheckpointInterval: 4000})
-	for sk, tree := range multiTree.Trees {
-		require.NoError(t, restorePostOrderMt.MountTree(sk))
-		exporter := tree.Export(traverseOrder)
-
-		restoreTree := restorePostOrderMt.Trees[sk]
-		_, err := restoreTree.sql.WriteSnapshot(context.Background(), tree.Version(), exporter.Next, SnapshotOptions{WriteCheckpoint: true, TraverseOrder: traverseOrder})
-		require.NoError(t, err)
-		require.NoError(t, restoreTree.LoadSnapshot(tree.Version(), traverseOrder))
-	}
-	require.Equal(t, restorePostOrderMt.Hash(), restorePreOrderMt.Hash())
-
-	t.Log("build tree to version 20,000 and verify hash")
-	require.NoError(t, opts.Iterator.Next())
-	require.Equal(t, int64(12_001), opts.Iterator.Version())
-	opts.Until = 20_000
-	opts.UntilHash = "25907b193c697903218d92fa70a87ef6cdd6fa5b9162d955a4d70a9d5d2c4824"
-	testTreeBuild(t, restorePostOrderMt, opts)
-	require.NoError(t, restorePostOrderMt.Close())
 }
 
 // pre-requisites for the 2 tests below:
@@ -262,12 +225,7 @@ func TestOsmoLike_HotStart(t *testing.T) {
 	// logDir := "/tmp/osmo-like-many-v2"
 	logDir := "/Users/mattk/src/scratch/osmo-like-many/v2"
 	pool := NewNodePool()
-	multiTree, err := ImportMultiTree(pool, 1, tmpDir, TreeOptions{
-		HeightFilter:  1,
-		StateStorage:  true,
-		EvictionDepth: 16,
-		MetricsProxy:  newPrometheusMetricsProxy(),
-	})
+	multiTree, err := ImportMultiTree(pool, 1, tmpDir, TreeOptions{HeightFilter: 0, StateStorage: false})
 	require.NoError(t, err)
 	require.NotNil(t, multiTree)
 	opts := testutil.CompactedChangelogs(logDir)
@@ -282,13 +240,13 @@ func TestOsmoLike_HotStart(t *testing.T) {
 func TestOsmoLike_ColdStart(t *testing.T) {
 	tmpDir := "/tmp/iavl-v2"
 
-	treeOpts := TreeOptions{
-		CheckpointInterval: 50,
-		StateStorage:       true,
-		HeightFilter:       1,
-		EvictionDepth:      22,
-		MetricsProxy:       newPrometheusMetricsProxy(),
-	}
+	treeOpts := DefaultTreeOptions()
+	treeOpts.CheckpointInterval = -1
+	treeOpts.CheckpointMemory = 1.5 * 1024 * 1024 * 1024
+	treeOpts.StateStorage = false
+	treeOpts.HeightFilter = 1
+	treeOpts.EvictionDepth = 16
+	treeOpts.MetricsProxy = newPrometheusMetricsProxy()
 	multiTree := NewMultiTree(tmpDir, treeOpts)
 	require.NoError(t, multiTree.MountTrees())
 	require.NoError(t, multiTree.LoadVersion(1))

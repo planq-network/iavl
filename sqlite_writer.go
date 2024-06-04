@@ -259,6 +259,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		pruneCount       int64
 		pruneStartTime   time.Time
 		orphanQuery      *sqlite3.Stmt
+		saving           bool
 		// TODO use a map
 		deleteBranch func(shardId int64, version int64, sequence int) (err error)
 		deleteOrphan *sqlite3.Stmt
@@ -300,20 +301,32 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		return nil
 	}
 	saveTree := func(sig *saveSignal) {
-		res := &saveResult{}
-		res.n, res.err = sig.batch.saveBranches()
-		if res.err == nil {
-			err := w.sql.SaveRoot(sig.version, sig.root, sig.wantCheckpoint)
-			if err != nil {
-				res.err = fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)
-			}
+		err := w.sql.SaveRoot(sig.version, sig.root, sig.wantCheckpoint)
+		if err != nil {
+			w.treeResult <- &saveResult{err: fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)}
+			return
 		}
-		if sig.batch.isCheckpoint() {
-			if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
-				res.err = fmt.Errorf("failed tree checkpoint; %w", err)
-			}
+		if !sig.batch.isCheckpoint() {
+			return
 		}
-		w.treeResult <- res
+		if saving {
+			// TODO
+			w.treeResult <- &saveResult{err: fmt.Errorf("tree save in progress")}
+			return
+		}
+		saving = true
+		w.treeResult <- &saveResult{n: -1}
+
+		n, err := sig.batch.saveBranches()
+		if err != nil {
+			w.treeResult <- &saveResult{err: fmt.Errorf("failed to save branches; %w", err)}
+			return
+		}
+		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+			w.treeResult <- &saveResult{err: fmt.Errorf("failed tree checkpoint; %w", err)}
+		}
+		w.treeResult <- &saveResult{n: n}
+		saving = false
 	}
 	startPrune := func(startPruningVersion int64) error {
 		w.logger.Debug().Msgf("tree prune to version=%d", startPruningVersion)
@@ -447,6 +460,9 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 			Str("path", tree.sql.opts.Path).Logger(),
 	}
 	saveSig := &saveSignal{batch: batch, root: tree.root, version: tree.version, wantCheckpoint: tree.shouldCheckpoint}
+	for _, branch := range tree.branches {
+		batch.branches = append(batch.branches, tree.pool.Clone(branch))
+	}
 	w.treeCh <- saveSig
 	w.leafCh <- saveSig
 	treeResult := <-w.treeResult

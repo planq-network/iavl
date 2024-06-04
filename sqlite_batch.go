@@ -10,7 +10,14 @@ import (
 )
 
 type sqliteBatch struct {
-	tree   *Tree
+	// used in leaves, TODO remove
+	tree *Tree
+
+	// used in branch checkpoint
+	version       int64
+	branchOrphans []NodeKey
+	branches      []*Node
+
 	sql    *SqliteDb
 	size   int64
 	logger zerolog.Logger
@@ -238,21 +245,20 @@ func (b *sqliteBatch) isCheckpoint() bool {
 
 func (b *sqliteBatch) saveBranches() (n int64, err error) {
 	if b.isCheckpoint() {
-		tree := b.tree
 		b.treeCount = 0
 
-		shardID, err := tree.sql.nextShard(tree.version)
+		shardID, err := b.sql.nextShard(b.version)
 		if err != nil {
 			return 0, err
 		}
 		b.logger.Debug().Msgf("checkpoint db=tree version=%d shard=%d orphans=%s",
-			tree.version, shardID, humanize.Comma(int64(len(tree.branchOrphans))))
+			b.version, shardID, humanize.Comma(int64(len(b.branchOrphans))))
 
 		if err = b.newTreeBatch(shardID); err != nil {
 			return 0, err
 		}
 
-		for _, node := range tree.branches {
+		for _, node := range b.branches {
 			b.treeCount++
 			bz, err := node.Bytes()
 			if err != nil {
@@ -265,11 +271,12 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 				return 0, err
 			}
 			if node.evict {
-				tree.returnNode(node)
+				// TODO
+				b.tree.returnNode(node)
 			}
 		}
 
-		for _, orphan := range tree.branchOrphans {
+		for _, orphan := range b.branchOrphans {
 			b.treeCount++
 			err = b.execBranchOrphan(orphan)
 			if err != nil {
