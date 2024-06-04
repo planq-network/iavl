@@ -65,8 +65,8 @@ type Node struct {
 }
 
 func (node *Node) String() string {
-	return fmt.Sprintf("Node{hash: %x, nodeKey: %s, leftNodeKey: %v, rightNodeKey: %v, size: %d, subtreeHeight: %d, poolId: %d}",
-		node.hash, node.nodeKey, node.leftNodeKey, node.rightNodeKey, node.size, node.subtreeHeight, node.poolId)
+	return fmt.Sprintf("Node{hash: %x, nodeKey: %s, leftNodeKey: %v, rightNodeKey: %v, size: %d, subtreeHeight: %d, evict: %t, dirty: %t, poolId: %d}",
+		node.hash, node.nodeKey, node.leftNodeKey, node.rightNodeKey, node.size, node.subtreeHeight, node.evict, node.dirty, node.poolId)
 }
 
 func (node *Node) isLeaf() bool {
@@ -111,6 +111,7 @@ func (node *Node) getLeftNode(t *Tree) (*Node, error) {
 	var ok bool
 	node.leftNode, ok = t.sqlWriter.cache[node.leftNodeKey]
 	if ok {
+		delete(t.sqlWriter.cache, node.leftNodeKey)
 		return node.leftNode, nil
 	}
 	var err error
@@ -132,6 +133,7 @@ func (node *Node) getRightNode(t *Tree) (*Node, error) {
 	var ok bool
 	node.rightNode, ok = t.sqlWriter.cache[node.rightNodeKey]
 	if ok {
+		delete(t.sqlWriter.cache, node.rightNodeKey)
 		return node.rightNode, nil
 	}
 	var err error
