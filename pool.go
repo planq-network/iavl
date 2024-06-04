@@ -55,7 +55,7 @@ func (np *NodePool) Put(node *Node) {
 	np.syncPool.Put(node)
 }
 
-func (np *NodePool) Clone(n *Node) *Node {
+func (np *NodePool) clone(n *Node) *Node {
 	node := np.Get()
 	node.leftNodeKey = n.leftNodeKey
 	node.rightNodeKey = n.rightNodeKey

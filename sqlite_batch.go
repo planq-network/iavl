@@ -251,7 +251,7 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 		if err != nil {
 			return 0, err
 		}
-		b.logger.Debug().Msgf("checkpoint db=tree version=%d shard=%d orphans=%s",
+		b.logger.Debug().Msgf("checkpoint version=%d shard=%d orphans=%s",
 			b.version, shardID, humanize.Comma(int64(len(b.branchOrphans))))
 
 		if err = b.newTreeBatch(shardID); err != nil {

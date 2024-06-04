@@ -107,6 +107,12 @@ func (node *Node) getLeftNode(t *Tree) (*Node, error) {
 	if node.leftNode != nil {
 		return node.leftNode, nil
 	}
+	// check writer cache
+	var ok bool
+	node.leftNode, ok = t.sqlWriter.cache[node.leftNodeKey]
+	if ok {
+		return node.leftNode, nil
+	}
 	var err error
 	node.leftNode, err = t.sql.getLeftNode(node)
 	if err != nil {
@@ -120,6 +126,12 @@ func (node *Node) getRightNode(t *Tree) (*Node, error) {
 		return nil, fmt.Errorf("leaf node has no right node")
 	}
 	if node.rightNode != nil {
+		return node.rightNode, nil
+	}
+	// check writer cache
+	var ok bool
+	node.rightNode, ok = t.sqlWriter.cache[node.rightNodeKey]
+	if ok {
 		return node.rightNode, nil
 	}
 	var err error

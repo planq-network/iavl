@@ -19,7 +19,6 @@ type pruneSignal struct {
 type saveSignal struct {
 	batch          *sqliteBatch
 	root           *Node
-	version        int64
 	wantCheckpoint bool
 }
 
@@ -31,6 +30,7 @@ type saveResult struct {
 type sqlWriter struct {
 	sql    *SqliteDb
 	logger zerolog.Logger
+	cache  map[NodeKey]*Node
 
 	treePruneCh chan *pruneSignal
 	treeCh      chan *saveSignal
@@ -39,6 +39,8 @@ type sqlWriter struct {
 	leafPruneCh chan *pruneSignal
 	leafCh      chan *saveSignal
 	leafResult  chan *saveResult
+
+	asyncSaving bool
 }
 
 func (sql *SqliteDb) newSQLWriter() *sqlWriter {
@@ -50,6 +52,7 @@ func (sql *SqliteDb) newSQLWriter() *sqlWriter {
 		treeCh:      make(chan *saveSignal),
 		leafResult:  make(chan *saveResult),
 		treeResult:  make(chan *saveResult),
+		cache:       make(map[NodeKey]*Node),
 		logger:      sql.logger.With().Str("module", "write").Logger(),
 	}
 }
@@ -301,12 +304,13 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		return nil
 	}
 	saveTree := func(sig *saveSignal) {
-		err := w.sql.SaveRoot(sig.version, sig.root, sig.wantCheckpoint)
+		err := w.sql.SaveRoot(sig.batch.version, sig.root, sig.wantCheckpoint)
 		if err != nil {
-			w.treeResult <- &saveResult{err: fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.version, err)}
+			w.treeResult <- &saveResult{err: fmt.Errorf("failed to save root path=%s version=%d: %w", w.sql.opts.Path, sig.batch.version, err)}
 			return
 		}
 		if !sig.batch.isCheckpoint() {
+			w.treeResult <- &saveResult{n: 0}
 			return
 		}
 		if saving {
@@ -315,7 +319,7 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 			return
 		}
 		saving = true
-		w.treeResult <- &saveResult{n: -1}
+		w.treeResult <- &saveResult{n: -34}
 
 		n, err := sig.batch.saveBranches()
 		if err != nil {
@@ -325,8 +329,8 @@ func (w *sqlWriter) treeLoop(ctx context.Context) error {
 		if err := w.sql.treeWrite.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			w.treeResult <- &saveResult{err: fmt.Errorf("failed tree checkpoint; %w", err)}
 		}
-		w.treeResult <- &saveResult{n: n}
 		saving = false
+		w.treeResult <- &saveResult{n: n}
 	}
 	startPrune := func(startPruningVersion int64) error {
 		w.logger.Debug().Msgf("tree prune to version=%d", startPruningVersion)
@@ -458,10 +462,28 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 		logger: log.With().
 			Str("module", "sqlite-batch").
 			Str("path", tree.sql.opts.Path).Logger(),
+		version: tree.version,
 	}
-	saveSig := &saveSignal{batch: batch, root: tree.root, version: tree.version, wantCheckpoint: tree.shouldCheckpoint}
-	for _, branch := range tree.branches {
-		batch.branches = append(batch.branches, tree.pool.Clone(branch))
+
+	if w.asyncSaving {
+		treeResult := <-w.treeResult
+		if treeResult.err != nil {
+			return fmt.Errorf("failed to save tree; err from last: %w", treeResult.err)
+		}
+		if treeResult.n > 0 {
+			w.logger.Info().Msgf("async checkpoint done; branches=%d", treeResult.n)
+			// TODO this or delete each node?
+			w.cache = make(map[NodeKey]*Node)
+			w.asyncSaving = false
+		}
+	}
+
+	saveSig := &saveSignal{batch: batch, root: tree.root, wantCheckpoint: tree.shouldCheckpoint}
+	if tree.shouldCheckpoint {
+		for _, branch := range tree.branches {
+			w.cache[branch.nodeKey] = branch
+		}
+		batch.branches = tree.branches
 	}
 	w.treeCh <- saveSig
 	w.leafCh <- saveSig
@@ -471,6 +493,10 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 	tree.sql.metrics.WriteDurations = append(tree.sql.metrics.WriteDurations, dur)
 	tree.sql.metrics.WriteTime += dur
 	tree.sql.metrics.WriteLeaves += int64(len(tree.leaves))
+
+	if treeResult.n == -37 {
+		w.asyncSaving = true
+	}
 
 	err := errors.Join(treeResult.err, leafResult.err)
 

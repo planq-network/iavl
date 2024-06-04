@@ -238,11 +238,11 @@ func TestOsmoLike_HotStart(t *testing.T) {
 }
 
 func TestOsmoLike_ColdStart(t *testing.T) {
-	tmpDir := "/tmp/iavl-v2"
+	tmpDir := "/Users/mattk/.costor/iavl-v2"
 
 	treeOpts := DefaultTreeOptions()
-	treeOpts.CheckpointInterval = -1
-	treeOpts.CheckpointMemory = 1.5 * 1024 * 1024 * 1024
+	treeOpts.CheckpointInterval = 5
+	// treeOpts.CheckpointMemory = 1.5 * 1024 * 1024 * 1024
 	treeOpts.StateStorage = false
 	treeOpts.HeightFilter = 1
 	treeOpts.EvictionDepth = 16
@@ -252,8 +252,8 @@ func TestOsmoLike_ColdStart(t *testing.T) {
 	require.NoError(t, multiTree.LoadVersion(1))
 	// require.NoError(t, multiTree.WarmLeaves())
 
-	// logDir := "/tmp/osmo-like-many-v2"
-	opts := testutil.CompactedChangelogs("/Users/mattk/src/scratch/osmo-like-many/v2")
+	logDir := "/tmp/osmo-like-many/v2"
+	opts := testutil.CompactedChangelogs(logDir)
 	opts.SampleRate = 250_000
 
 	opts.Until = 1_000
