@@ -109,11 +109,11 @@ func (node *Node) getLeftNode(t *Tree) (*Node, error) {
 	}
 	// check writer cache
 	var ok bool
-	node.leftNode, ok = t.sqlWriter.cache[node.leftNodeKey]
+	node.leftNode, ok = t.sqlWriter.cachePop(node.leftNodeKey)
 	if ok {
-		delete(t.sqlWriter.cache, node.leftNodeKey)
 		return node.leftNode, nil
 	}
+
 	var err error
 	node.leftNode, err = t.sql.getLeftNode(node)
 	if err != nil {
@@ -131,11 +131,11 @@ func (node *Node) getRightNode(t *Tree) (*Node, error) {
 	}
 	// check writer cache
 	var ok bool
-	node.rightNode, ok = t.sqlWriter.cache[node.rightNodeKey]
+	node.rightNode, ok = t.sqlWriter.cachePop(node.rightNodeKey)
 	if ok {
-		delete(t.sqlWriter.cache, node.rightNodeKey)
 		return node.rightNode, nil
 	}
+
 	var err error
 	node.rightNode, err = t.sql.getRightNode(node)
 	if err != nil {

@@ -282,7 +282,7 @@ func (tree *Tree) deepHash(node *Node, depth int8) {
 	}
 
 	// finally, if checkpointing, remove node's children from memory if we're at the eviction height
-	if tree.shouldCheckpoint {
+	if tree.shouldCheckpoint && tree.evictionDepth > 0 {
 		if depth >= tree.evictionDepth {
 			node.evictChildren()
 		}

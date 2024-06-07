@@ -270,10 +270,10 @@ func (b *sqliteBatch) saveBranches() (n int64, err error) {
 			if err = b.treeMaybeCommit(shardID); err != nil {
 				return 0, err
 			}
-			// if node.evict {
-			// 	// TODO, remove tree reference
-			// 	b.tree.returnNode(node)
-			// }
+			if node.evict {
+				// TODO, remove tree reference
+				b.tree.returnNode(node)
+			}
 		}
 
 		for _, orphan := range b.branchOrphans {

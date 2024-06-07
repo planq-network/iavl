@@ -3,6 +3,8 @@ package iavl
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -497,7 +499,7 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 		if treeRes.err != nil {
 			return fmt.Errorf("err from last checkpoint: %w", treeRes.err)
 		}
-		w.logger.Debug().Msgf("ACK lack checkpoint branches=%d", treeRes.n)
+		w.logger.Debug().Msgf("ACK last checkpoint branches=%d", treeRes.n)
 		// TODO empty cache if successful result found
 
 	default:
@@ -508,24 +510,32 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 
 	if tree.shouldCheckpoint {
 		// nextCache := make(map[NodeKey]*Node)
+		// TODO!
+		// for caching, need a double copy.
+		// 1) once to freeze state for save
+		// 2) once to cache; if an evicted node is pulled from cache and mutated it will result in a bad write
 		for _, branch := range tree.branches {
 			batch.branches = append(batch.branches, tree.pool.clone(branch))
 			// if branch.evict {
+			// 	branch.leftNode = nil
+			// 	branch.rightNode = nil
 			// 	nextCache[branch.nodeKey] = branch
 			// }
 		}
+		// if err := debugDump(tree.sql.opts.Path, tree.version, nextCache); err != nil {
+		// 	return err
+		// }
+
 		// wait for prior save to complete
 		startWait := time.Now()
 		w.treeCh <- saveSig
 		w.logger.Debug().Msgf("save signal sent, waited %s", time.Since(startWait).Round(time.Millisecond))
+
 		// swap caches
 		// for _, n := range w.cache {
 		// 	tree.returnNode(n)
 		// }
 		// w.cache = nextCache
-
-		// batch.branches = tree.branches
-		// evictCount := 0
 
 		// for _, node := range tree.branches {
 		// 	if node.evict {
@@ -534,11 +544,6 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 		// }
 		// w.logger.Debug().Msgf("saving checkpoint version=%d branches=%d evict=%d",
 		// 	tree.version, len(tree.branches), evictCount)
-
-		// _, err := w.saveCheckpoint(batch, tree.root)
-		// if err != nil {
-		// 	return err
-		// }
 	}
 
 	leafResult := <-w.leafResult
@@ -548,6 +553,32 @@ func (w *sqlWriter) saveTree(tree *Tree) error {
 	tree.sql.metrics.WriteLeaves += int64(len(tree.leaves))
 
 	return leafResult.err
+}
+
+func (w *sqlWriter) cachePop(key NodeKey) (*Node, bool) {
+	n, ok := w.cache[key]
+	if ok {
+		delete(w.cache, key)
+	}
+	return n, ok
+}
+
+func debugDump(path string, version int64, cache map[NodeKey]*Node) error {
+	module := strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
+	if module == "slashing" || module == "lockup" {
+		f, err := os.Create(fmt.Sprintf("%s-%d.txt", module, version))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		for k := range cache {
+			_, err := f.WriteString(fmt.Sprintf("%s\n", k))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // TODO
