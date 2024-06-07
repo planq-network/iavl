@@ -8,9 +8,7 @@ import (
 type NodePool struct {
 	syncPool *sync.Pool
 
-	free  chan int
-	nodes []Node
-
+	free   chan int
 	poolId uint64
 }
 

@@ -21,7 +21,7 @@ func probeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "probe",
 		Short: "prob sqlite cgo configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			f, err := os.CreateTemp("", "iavl-v2-probe.sqlite")
 			if err != nil {
 				return err
@@ -82,7 +82,7 @@ func rootsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "roots",
 		Short: "list roots",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			sql, err := iavl.NewSqliteDb(iavl.NewNodePool(), iavl.SqliteDbOptions{Path: dbPath})
 			if err != nil {
 				return err

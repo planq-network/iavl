@@ -40,11 +40,11 @@ func (b *sqliteBatch) newChangeLogBatch() (err error) {
 	if err = b.sql.leafWrite.Begin(); err != nil {
 		return err
 	}
-	b.leafInsert, err = b.sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf (version, sequence, bytes) VALUES (?, ?, ?)")
+	b.leafInsert, err = b.sql.leafWrite.Prepare("INSERT INTO leaf (version, sequence, bytes) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
 	}
-	b.deleteInsert, err = b.sql.leafWrite.Prepare("INSERT OR REPLACE INTO leaf_delete (version, sequence, key) VALUES (?, ?, ?)")
+	b.deleteInsert, err = b.sql.leafWrite.Prepare("INSERT INTO leaf_delete (version, sequence, key) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
 	}

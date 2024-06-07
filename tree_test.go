@@ -63,6 +63,7 @@ func testTreeBuild(t *testing.T, multiTree *MultiTree, opts *testutil.TreeBuildO
 			workingSize  int64
 			writeLeaves  int64
 			writeTime    time.Duration
+			hashCount    int64
 		)
 		for _, tr := range multiTree.Trees {
 			m := tr.sql.metrics
@@ -70,9 +71,11 @@ func testTreeBuild(t *testing.T, multiTree *MultiTree, opts *testutil.TreeBuildO
 			workingSize += tr.workingSize
 			writeLeaves += m.WriteLeaves
 			writeTime += m.WriteTime
+			hashCount += tr.metrics.TreeHash
 			m.WriteDurations = nil
 			m.WriteLeaves = 0
 			m.WriteTime = 0
+			tr.metrics.TreeHash = 0
 		}
 		fmt.Printf("leaves=%s time=%s last=%s μ=%s version=%d work-size=%s work-bytes=%s %s\n",
 			humanize.Comma(cnt),
@@ -85,11 +88,12 @@ func testTreeBuild(t *testing.T, multiTree *MultiTree, opts *testutil.TreeBuildO
 			MemUsage())
 
 		if writeTime > 0 {
-			fmt.Printf("writes: cnt=%s wr/s=%s dur/wr=%s dur=%s\n",
+			fmt.Printf("writes: cnt=%s wr/s=%s dur/wr=%s dur=%s hashes=%s\n",
 				humanize.Comma(writeLeaves),
 				humanize.Comma(int64(float64(writeLeaves)/writeTime.Seconds())),
 				time.Duration(int64(writeTime)/writeLeaves),
 				writeTime.Round(time.Millisecond),
+				humanize.Comma(hashCount),
 			)
 		}
 
@@ -157,7 +161,6 @@ func TestTree_Hash(t *testing.T) {
 	var err error
 
 	tmpDir := t.TempDir()
-	//tmpDir := "/tmp/iavl-test"
 	t.Logf("levelDb tmpDir: %s\n", tmpDir)
 
 	require.NoError(t, err)
@@ -221,43 +224,51 @@ func TestTree_Build_Load(t *testing.T) {
 // $ go run ./cmd snapshot --db /tmp/iavl-v2 --version 1
 // mkdir -p /tmp/osmo-like-many/v2 && go run ./cmd gen emit --start 2 --limit 5000 --type osmo-like-many --out /tmp/osmo-like-many/v2
 func TestOsmoLike_HotStart(t *testing.T) {
-	tmpDir := "/tmp/iavl-v2"
-	// logDir := "/tmp/osmo-like-many-v2"
-	logDir := "/Users/mattk/src/scratch/osmo-like-many/v2"
+	tmpDir := "/Users/mattk/.costor/iavl-v2"
+	logDir := "/Users/mattk/src/devmos/osmo-like-many/v2"
+
 	pool := NewNodePool()
-	multiTree, err := ImportMultiTree(pool, 1, tmpDir, TreeOptions{HeightFilter: 0, StateStorage: false})
+	multiTree, err := ImportMultiTree(pool, 1, tmpDir, TreeOptions{
+		HeightFilter:       0,
+		StateStorage:       false,
+		CheckpointInterval: 1001,
+	})
 	require.NoError(t, err)
 	require.NotNil(t, multiTree)
 	opts := testutil.CompactedChangelogs(logDir)
 	opts.SampleRate = 250_000
 
-	opts.Until = 1_000
-	opts.UntilHash = "557663181d9ab97882ecfc6538e3b4cfe31cd805222fae905c4b4f4403ca5cda"
+	// opts.Until = 1_000
+	// opts.UntilHash = "557663181d9ab97882ecfc6538e3b4cfe31cd805222fae905c4b4f4403ca5cda"
+	opts.Until = 500
+	opts.UntilHash = "2670bd5767e70f2bf9e4f723b5f205759e39afdb5d8cfb6b54a4a3ecc27a1377"
 
 	testTreeBuild(t, multiTree, opts)
 }
 
 func TestOsmoLike_ColdStart(t *testing.T) {
 	tmpDir := "/Users/mattk/.costor/iavl-v2"
+	logDir := "/tmp/osmo-like-many/v2"
 
 	treeOpts := DefaultTreeOptions()
-	treeOpts.CheckpointInterval = 150
+	treeOpts.CheckpointInterval = 200
 	// treeOpts.CheckpointMemory = 1.5 * 1024 * 1024 * 1024
 	treeOpts.StateStorage = false
 	treeOpts.HeightFilter = 1
-	treeOpts.EvictionDepth = 20
+	treeOpts.EvictionDepth = 23
 	treeOpts.MetricsProxy = newPrometheusMetricsProxy()
 	multiTree := NewMultiTree(tmpDir, treeOpts)
 	require.NoError(t, multiTree.MountTrees())
 	require.NoError(t, multiTree.LoadVersion(1))
-	// require.NoError(t, multiTree.WarmLeaves())
+	require.NoError(t, multiTree.WarmLeaves())
 
-	logDir := "/tmp/osmo-like-many/v2"
 	opts := testutil.CompactedChangelogs(logDir)
 	opts.SampleRate = 250_000
 
-	opts.Until = 1_000
-	opts.UntilHash = "557663181d9ab97882ecfc6538e3b4cfe31cd805222fae905c4b4f4403ca5cda"
+	// opts.Until = 1_000
+	// opts.UntilHash = "557663181d9ab97882ecfc6538e3b4cfe31cd805222fae905c4b4f4403ca5cda"
+	opts.Until = 500
+	opts.UntilHash = "2670bd5767e70f2bf9e4f723b5f205759e39afdb5d8cfb6b54a4a3ecc27a1377"
 
 	testTreeBuild(t, multiTree, opts)
 }
