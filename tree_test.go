@@ -1766,25 +1766,19 @@ func Benchmark_GetByIndex(b *testing.B) {
 func TestNodeCacheStatisic(t *testing.T) {
 	const numKeyVals = 100000
 	testcases := map[string]struct {
-		cacheSize              int
-		expectFastCacheHitCnt  int
-		expectFastCacheMissCnt int
-		expectCacheHitCnt      int
-		expectCacheMissCnt     int
+		cacheSize          int
+		expectCacheHitCnt  int
+		expectCacheMissCnt int
 	}{
 		"with_cache": {
-			cacheSize:              numKeyVals,
-			expectFastCacheHitCnt:  numKeyVals,
-			expectFastCacheMissCnt: 0,
-			expectCacheHitCnt:      1,
-			expectCacheMissCnt:     0,
+			cacheSize:          numKeyVals,
+			expectCacheHitCnt:  1,
+			expectCacheMissCnt: 0,
 		},
 		"without_cache": {
-			cacheSize:              0,
-			expectFastCacheHitCnt:  100000, // this value is hardcoded in nodedb for fast cache.
-			expectFastCacheMissCnt: 0,
-			expectCacheHitCnt:      0,
-			expectCacheMissCnt:     1,
+			cacheSize:          0,
+			expectCacheHitCnt:  0,
+			expectCacheMissCnt: 1,
 		},
 	}
 
@@ -1811,8 +1805,6 @@ func TestNodeCacheStatisic(t *testing.T) {
 				require.NotNil(t, val)
 				require.NotEmpty(t, val)
 			}
-			require.Equal(t, tc.expectFastCacheHitCnt, int(stat.GetFastCacheHitCnt()))
-			require.Equal(t, tc.expectFastCacheMissCnt, int(stat.GetFastCacheMissCnt()))
 			require.Equal(t, tc.expectCacheHitCnt, int(stat.GetCacheHitCnt()))
 			require.Equal(t, tc.expectCacheMissCnt, int(stat.GetCacheMissCnt()))
 		})
